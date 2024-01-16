@@ -20,6 +20,7 @@ package org.apache.iceberg.spark.extensions;
 
 import static org.apache.iceberg.TableProperties.GC_ENABLED;
 import static org.apache.iceberg.TableProperties.WRITE_AUDIT_PUBLISH_ENABLED;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,7 +30,6 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -40,6 +40,7 @@ import org.apache.iceberg.Files;
 import org.apache.iceberg.GenericBlobMetadata;
 import org.apache.iceberg.GenericStatisticsFile;
 import org.apache.iceberg.ManifestFile;
+import org.apache.iceberg.ParameterizedTestExtension;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.ReachableFileUtil;
 import org.apache.iceberg.StatisticsFile;
@@ -64,22 +65,14 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchProcedureException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.parser.ParseException;
 import org.assertj.core.api.Assertions;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 
+@ExtendWith(ParameterizedTestExtension.class)
 public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
 
-  @Rule public TemporaryFolder temp = new TemporaryFolder();
-
-  public TestRemoveOrphanFilesProcedure(
-      String catalogName, String implementation, Map<String, String> config) {
-    super(catalogName, implementation, config);
-  }
-
-  @After
+  @AfterEach
   public void removeTable() {
     // TODO: use the Iceberg catalog to drop the table until SPARK-43203 is fixed
     validationCatalog.dropTable(tableIdent, true /* purge */);
@@ -87,7 +80,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
     sql("DROP TABLE IF EXISTS p PURGE");
   }
 
-  @Test
+  @TestTemplate
   public void testRemoveOrphanFilesInEmptyTable() {
     sql("CREATE TABLE %s (id bigint NOT NULL, data string) USING iceberg", tableName);
 
@@ -98,7 +91,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
     assertEquals("Should have no rows", ImmutableList.of(), sql("SELECT * FROM %s", tableName));
   }
 
-  @Test
+  @TestTemplate
   public void testRemoveOrphanFilesInDataFolder() throws IOException {
     if (catalogName.equals("testhadoop")) {
       sql("CREATE TABLE %s (id bigint NOT NULL, data string) USING iceberg", tableName);
@@ -107,7 +100,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
       // correctly while dropping tables through spark_catalog
       sql(
           "CREATE TABLE %s (id bigint NOT NULL, data string) USING iceberg LOCATION '%s'",
-          tableName, temp.newFolder());
+          tableName, java.nio.file.Files.createTempDirectory(temp, "junit"));
     }
 
     sql("INSERT INTO TABLE %s VALUES (1, 'a')", tableName);
@@ -144,7 +137,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
                 + "table => '%s',"
                 + "older_than => TIMESTAMP '%s')",
             catalogName, tableIdent, currentTimestamp);
-    Assert.assertEquals("Should be orphan files in the data folder", 1, output2.size());
+    assertThat(output2).as("Should be 1 orphan file in the data folder").hasSize(1);
 
     // the previous call should have deleted all orphan files
     List<Object[]> output3 =
@@ -153,7 +146,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
                 + "table => '%s',"
                 + "older_than => TIMESTAMP '%s')",
             catalogName, tableIdent, currentTimestamp);
-    Assert.assertEquals("Should be no more orphan files in the data folder", 0, output3.size());
+    assertThat(output3).as("Should be no more orphan files in the data folder").hasSize(0);
 
     assertEquals(
         "Should have expected rows",
@@ -161,7 +154,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
         sql("SELECT * FROM %s ORDER BY id", tableName));
   }
 
-  @Test
+  @TestTemplate
   public void testRemoveOrphanFilesDryRun() throws IOException {
     if (catalogName.equals("testhadoop")) {
       sql("CREATE TABLE %s (id bigint NOT NULL, data string) USING iceberg", tableName);
@@ -170,7 +163,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
       // correctly while dropping tables through spark_catalog
       sql(
           "CREATE TABLE %s (id bigint NOT NULL, data string) USING iceberg LOCATION '%s'",
-          tableName, temp.newFolder());
+          tableName, java.nio.file.Files.createTempDirectory(temp, "junit"));
     }
 
     sql("INSERT INTO TABLE %s VALUES (1, 'a')", tableName);
@@ -195,7 +188,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
                 + "older_than => TIMESTAMP '%s',"
                 + "dry_run => true)",
             catalogName, tableIdent, currentTimestamp);
-    Assert.assertEquals("Should be one orphan files", 1, output1.size());
+    assertThat(output1).as("Should be one orphan file").hasSize(1);
 
     // actually delete orphans
     List<Object[]> output2 =
@@ -204,7 +197,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
                 + "table => '%s',"
                 + "older_than => TIMESTAMP '%s')",
             catalogName, tableIdent, currentTimestamp);
-    Assert.assertEquals("Should be one orphan files", 1, output2.size());
+    assertThat(output2).as("Should be one orphan file").hasSize(1);
 
     // the previous call should have deleted all orphan files
     List<Object[]> output3 =
@@ -213,7 +206,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
                 + "table => '%s',"
                 + "older_than => TIMESTAMP '%s')",
             catalogName, tableIdent, currentTimestamp);
-    Assert.assertEquals("Should be no more orphan files", 0, output3.size());
+    assertThat(output3).as("Should no more orphan files").hasSize(0);
 
     assertEquals(
         "Should have expected rows",
@@ -221,7 +214,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
         sql("SELECT * FROM %s ORDER BY id", tableName));
   }
 
-  @Test
+  @TestTemplate
   public void testRemoveOrphanFilesGCDisabled() {
     sql("CREATE TABLE %s (id bigint NOT NULL, data string) USING iceberg", tableName);
 
@@ -237,7 +230,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
     sql("ALTER TABLE %s SET TBLPROPERTIES ('%s' 'true')", tableName, GC_ENABLED);
   }
 
-  @Test
+  @TestTemplate
   public void testRemoveOrphanFilesWap() {
     sql("CREATE TABLE %s (id bigint NOT NULL, data string) USING iceberg", tableName);
     sql("ALTER TABLE %s SET TBLPROPERTIES ('%s' 'true')", tableName, WRITE_AUDIT_PUBLISH_ENABLED);
@@ -256,7 +249,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
     assertEquals("Should be no orphan files", ImmutableList.of(), output);
   }
 
-  @Test
+  @TestTemplate
   public void testInvalidRemoveOrphanFilesCases() {
     Assertions.assertThatThrownBy(
             () -> sql("CALL %s.system.remove_orphan_files('n', table => 't')", catalogName))
@@ -282,7 +275,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
         .hasMessage("Cannot handle an empty identifier for argument table");
   }
 
-  @Test
+  @TestTemplate
   public void testConcurrentRemoveOrphanFiles() throws IOException {
     if (catalogName.equals("testhadoop")) {
       sql("CREATE TABLE %s (id bigint NOT NULL, data string) USING iceberg", tableName);
@@ -291,7 +284,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
       // correctly while dropping tables through spark_catalog
       sql(
           "CREATE TABLE %s (id bigint NOT NULL, data string) USING iceberg LOCATION '%s'",
-          tableName, temp.newFolder());
+          tableName, java.nio.file.Files.createTempDirectory(temp, "junit"));
     }
 
     sql("INSERT INTO TABLE %s VALUES (1, 'a')", tableName);
@@ -322,7 +315,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
                 + "max_concurrent_deletes => %s,"
                 + "older_than => TIMESTAMP '%s')",
             catalogName, tableIdent, 4, currentTimestamp);
-    Assert.assertEquals("Should be orphan files in the data folder", 4, output.size());
+    assertThat(output).as("Should be 4 orphan files in the data folder").hasSize(4);
 
     // the previous call should have deleted all orphan files
     List<Object[]> output3 =
@@ -332,7 +325,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
                 + "max_concurrent_deletes => %s,"
                 + "older_than => TIMESTAMP '%s')",
             catalogName, tableIdent, 4, currentTimestamp);
-    Assert.assertEquals("Should be no more orphan files in the data folder", 0, output3.size());
+    assertThat(output3).as("Should be no more orphan files in the data folder").hasSize(0);
 
     assertEquals(
         "Should have expected rows",
@@ -340,7 +333,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
         sql("SELECT * FROM %s ORDER BY id", tableName));
   }
 
-  @Test
+  @TestTemplate
   public void testConcurrentRemoveOrphanFilesWithInvalidInput() {
     sql("CREATE TABLE %s (id bigint NOT NULL, data string) USING iceberg", tableName);
 
@@ -398,7 +391,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
         .hasMessage("Invalid last_modified column: StringType is not a timestamp");
   }
 
-  @Test
+  @TestTemplate
   public void testRemoveOrphanFilesWithDeleteFiles() throws Exception {
     sql(
         "CREATE TABLE %s (id int, data string) USING iceberg TBLPROPERTIES"
@@ -419,9 +412,8 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
     sql("DELETE FROM %s WHERE id=1", tableName);
 
     Table table = Spark3Util.loadIcebergTable(spark, tableName);
-    Assert.assertEquals(
-        "Should have 1 delete manifest", 1, TestHelpers.deleteManifests(table).size());
-    Assert.assertEquals("Should have 1 delete file", 1, TestHelpers.deleteFiles(table).size());
+    assertThat(TestHelpers.deleteManifests(table)).as("Should have 1 delete manifest").hasSize(1);
+    assertThat(TestHelpers.deleteFiles(table)).as("Should have 1 delete file").hasSize(1);
     Path deleteManifestPath = new Path(TestHelpers.deleteManifests(table).iterator().next().path());
     Path deleteFilePath =
         new Path(String.valueOf(TestHelpers.deleteFiles(table).iterator().next().path()));
@@ -437,20 +429,22 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
                 + "table => '%s',"
                 + "older_than => TIMESTAMP '%s')",
             catalogName, tableIdent, currentTimestamp);
-    Assert.assertEquals("Should be no orphan files", 0, output.size());
+    assertThat(output).as("Should be no orphan files").hasSize(0);
 
     FileSystem localFs = FileSystem.getLocal(new Configuration());
-    Assert.assertTrue("Delete manifest should still exist", localFs.exists(deleteManifestPath));
-    Assert.assertTrue("Delete file should still exist", localFs.exists(deleteFilePath));
+    assertThat(localFs.exists(deleteManifestPath))
+        .as("Delete manifest should still exist")
+        .isTrue();
+    assertThat(localFs.exists(deleteFilePath)).as("Delete file should still exist").isTrue();
 
     records.remove(new SimpleRecord(1, "a"));
     Dataset<Row> resultDF = spark.read().format("iceberg").load(tableName);
     List<SimpleRecord> actualRecords =
         resultDF.as(Encoders.bean(SimpleRecord.class)).collectAsList();
-    Assert.assertEquals("Rows must match", records, actualRecords);
+    assertThat(actualRecords).as("Rows must match").isEqualTo(records);
   }
 
-  @Test
+  @TestTemplate
   public void testRemoveOrphanFilesWithStatisticFiles() throws Exception {
     sql(
         "CREATE TABLE %s USING iceberg "
@@ -506,10 +500,10 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
                 + "table => '%s',"
                 + "older_than => TIMESTAMP '%s')",
             catalogName, tableIdent, currentTimestamp);
-    Assertions.assertThat(output).as("Should be no orphan files").isEmpty();
+    assertThat(output).as("Should be no orphan files").isEmpty();
 
-    Assertions.assertThat(statsLocation.exists()).as("stats file should exist").isTrue();
-    Assertions.assertThat(statsLocation.length())
+    assertThat(statsLocation.exists()).as("stats file should exist").isTrue();
+    assertThat(statsLocation.length())
         .as("stats file length")
         .isEqualTo(statisticsFile.fileSizeInBytes());
 
@@ -523,14 +517,14 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
                 + "table => '%s',"
                 + "older_than => TIMESTAMP '%s')",
             catalogName, tableIdent, currentTimestamp);
-    Assertions.assertThat(output).as("Should be orphan files").hasSize(1);
-    Assertions.assertThat(Iterables.getOnlyElement(output))
+    assertThat(output).as("Should be orphan files").hasSize(1);
+    assertThat(Iterables.getOnlyElement(output))
         .as("Deleted files")
         .containsExactly(statsLocation.toURI().toString());
-    Assertions.assertThat(statsLocation.exists()).as("stats file should be deleted").isFalse();
+    assertThat(statsLocation.exists()).as("stats file should be deleted").isFalse();
   }
 
-  @Test
+  @TestTemplate
   public void testRemoveOrphanFilesProcedureWithPrefixMode()
       throws NoSuchTableException, ParseException, IOException {
     if (catalogName.equals("testhadoop")) {
@@ -538,7 +532,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
     } else {
       sql(
           "CREATE TABLE %s (id bigint NOT NULL, data string) USING iceberg LOCATION '%s'",
-          tableName, temp.newFolder().toURI().toString());
+          tableName, java.nio.file.Files.createTempDirectory(temp, "junit").toUri().toString());
     }
     Table table = Spark3Util.loadIcebergTable(spark, tableName);
     String location = table.location();
@@ -595,7 +589,7 @@ public class TestRemoveOrphanFilesProcedure extends SparkExtensionsTestBase {
                 + "equal_schemes => map('file1', 'file'),"
                 + "file_list_view => '%s')",
             catalogName, tableIdent, fileListViewName);
-    Assert.assertEquals(0, orphanFiles.size());
+    assertThat(orphanFiles).hasSize(0);
 
     // Test with no equal schemes
     Assertions.assertThatThrownBy(

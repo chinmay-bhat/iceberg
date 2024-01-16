@@ -26,7 +26,7 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import org.apache.iceberg.PlanningMode;
+import org.apache.iceberg.ParameterizedTestExtension;
 import org.apache.iceberg.RowDelta;
 import org.apache.iceberg.RowLevelOperationMode;
 import org.apache.iceberg.Snapshot;
@@ -43,33 +43,12 @@ import org.apache.iceberg.util.SnapshotUtil;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.connector.catalog.Identifier;
 import org.assertj.core.api.Assertions;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.runners.Parameterized;
 
+@ExtendWith(ParameterizedTestExtension.class)
 public class TestMergeOnReadDelete extends TestDelete {
-
-  public TestMergeOnReadDelete(
-      String catalogName,
-      String implementation,
-      Map<String, String> config,
-      String fileFormat,
-      Boolean vectorized,
-      String distributionMode,
-      boolean fanoutEnabled,
-      String branch,
-      PlanningMode planningMode) {
-    super(
-        catalogName,
-        implementation,
-        config,
-        fileFormat,
-        vectorized,
-        distributionMode,
-        fanoutEnabled,
-        branch,
-        planningMode);
-  }
 
   @Override
   protected Map<String, String> extraTableProperties() {
@@ -80,17 +59,18 @@ public class TestMergeOnReadDelete extends TestDelete {
         RowLevelOperationMode.MERGE_ON_READ.modeName());
   }
 
+  // TODO: check alternative for AfterParam
   @Parameterized.AfterParam
   public static void clearTestSparkCatalogCache() {
     TestSparkCatalog.clearTables();
   }
 
-  @Test
+  @TestTemplate
   public void testDeleteFileGranularity() throws NoSuchTableException {
     checkDeleteFileGranularity(DeleteGranularity.FILE);
   }
 
-  @Test
+  @TestTemplate
   public void testDeletePartitionGranularity() throws NoSuchTableException {
     checkDeleteFileGranularity(DeleteGranularity.PARTITION);
   }
@@ -125,7 +105,7 @@ public class TestMergeOnReadDelete extends TestDelete {
         sql("SELECT * FROM %s ORDER BY id ASC, dep ASC", selectTarget()));
   }
 
-  @Test
+  @TestTemplate
   public void testCommitUnknownException() {
     createAndInitTable("id INT, dep STRING, category STRING");
 
@@ -183,7 +163,7 @@ public class TestMergeOnReadDelete extends TestDelete {
         sql("SELECT * FROM %s ORDER BY id", "dummy_catalog.default.table"));
   }
 
-  @Test
+  @TestTemplate
   public void testAggregatePushDownInMergeOnReadDelete() {
     createAndInitTable("id LONG, data INT");
     sql(
@@ -203,8 +183,9 @@ public class TestMergeOnReadDelete extends TestDelete {
       explainContainsPushDownAggregates = true;
     }
 
-    Assert.assertFalse(
-        "min/max/count not pushed down for deleted", explainContainsPushDownAggregates);
+    assertThat(explainContainsPushDownAggregates)
+        .as("min/max/count not pushed down for deleted")
+        .isFalse();
 
     List<Object[]> actual = sql(select, selectTarget());
     List<Object[]> expected = Lists.newArrayList();

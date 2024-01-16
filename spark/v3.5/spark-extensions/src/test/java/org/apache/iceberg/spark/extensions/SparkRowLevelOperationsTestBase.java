@@ -38,6 +38,7 @@ import static org.apache.iceberg.TableProperties.WRITE_DISTRIBUTION_MODE_NONE;
 import static org.apache.iceberg.TableProperties.WRITE_DISTRIBUTION_MODE_RANGE;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Arrays;
@@ -50,6 +51,9 @@ import java.util.stream.Collectors;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.Files;
+import org.apache.iceberg.Parameter;
+import org.apache.iceberg.ParameterizedTestExtension;
+import org.apache.iceberg.Parameters;
 import org.apache.iceberg.PlanningMode;
 import org.apache.iceberg.RowLevelOperationMode;
 import org.apache.iceberg.Snapshot;
@@ -69,47 +73,36 @@ import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.execution.SparkPlan;
-import org.junit.Assert;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.jupiter.api.extension.ExtendWith;
 
-@RunWith(Parameterized.class)
+@ExtendWith(ParameterizedTestExtension.class)
 public abstract class SparkRowLevelOperationsTestBase extends SparkExtensionsTestBase {
 
   private static final Random RANDOM = ThreadLocalRandom.current();
 
-  protected final String fileFormat;
-  protected final boolean vectorized;
-  protected final String distributionMode;
-  protected final boolean fanoutEnabled;
-  protected final String branch;
-  protected final PlanningMode planningMode;
+  @Parameter(index = 3)
+  protected String fileFormat;
 
-  public SparkRowLevelOperationsTestBase(
-      String catalogName,
-      String implementation,
-      Map<String, String> config,
-      String fileFormat,
-      boolean vectorized,
-      String distributionMode,
-      boolean fanoutEnabled,
-      String branch,
-      PlanningMode planningMode) {
-    super(catalogName, implementation, config);
-    this.fileFormat = fileFormat;
-    this.vectorized = vectorized;
-    this.distributionMode = distributionMode;
-    this.fanoutEnabled = fanoutEnabled;
-    this.branch = branch;
-    this.planningMode = planningMode;
-  }
+  @Parameter(index = 4)
+  protected boolean vectorized;
+
+  @Parameter(index = 5)
+  protected String distributionMode;
+
+  @Parameter(index = 6)
+  protected boolean fanoutEnabled;
+
+  @Parameter(index = 7)
+  protected String branch;
+
+  @Parameter(index = 8)
+  protected PlanningMode planningMode;
 
   @Parameters(
       name =
           "catalogName = {0}, implementation = {1}, config = {2},"
-              + " format = {3}, vectorized = {4}, distributionMode = {5},"
-              + " fanout = {6}, branch = {7}, planningMode = {8}")
+              + " fileFormat = {3}, vectorized = {4}, distributionMode = {5},"
+              + " fanoutEnabled = {6}, branch = {7}, planningMode = {8}")
   public static Object[][] parameters() {
     return new Object[][] {
       {
@@ -199,7 +192,7 @@ public abstract class SparkRowLevelOperationsTestBase extends SparkExtensionsTes
             tableName, ORC_VECTORIZATION_ENABLED, vectorized);
         break;
       case "avro":
-        Assert.assertFalse(vectorized);
+        assertThat(vectorized).isFalse();
         break;
     }
 
@@ -303,7 +296,7 @@ public abstract class SparkRowLevelOperationsTestBase extends SparkExtensionsTes
       String deletedDataFiles,
       String addedDeleteFiles,
       String addedDataFiles) {
-    Assert.assertEquals("Operation must match", operation, snapshot.operation());
+    assertThat(snapshot.operation()).as("Operation must match").isEqualTo(operation);
     validateProperty(snapshot, CHANGED_PARTITION_COUNT_PROP, changedPartitionCount);
     validateProperty(snapshot, DELETED_FILES_PROP, deletedDataFiles);
     validateProperty(snapshot, ADDED_DELETE_FILES_PROP, addedDeleteFiles);
@@ -312,20 +305,19 @@ public abstract class SparkRowLevelOperationsTestBase extends SparkExtensionsTes
 
   protected void validateProperty(Snapshot snapshot, String property, Set<String> expectedValues) {
     String actual = snapshot.summary().get(property);
-    Assert.assertTrue(
-        "Snapshot property "
-            + property
-            + " has unexpected value, actual = "
-            + actual
-            + ", expected one of : "
-            + String.join(",", expectedValues),
-        expectedValues.contains(actual));
+    assertThat(expectedValues)
+        .as(
+            String.format(
+                "Snapshot property %s has unexpected value, actual = %s, expected one of : %s",
+                property, actual, String.join(",", expectedValues)))
+        .contains(actual);
   }
 
   protected void validateProperty(Snapshot snapshot, String property, String expectedValue) {
     String actual = snapshot.summary().get(property);
-    Assert.assertEquals(
-        "Snapshot property " + property + " has unexpected value.", expectedValue, actual);
+    assertThat(actual)
+        .as(String.format("Snapshot property %s has unexpected value.", property))
+        .isEqualTo(expectedValue);
   }
 
   protected void sleep(long millis) {
@@ -338,7 +330,7 @@ public abstract class SparkRowLevelOperationsTestBase extends SparkExtensionsTes
 
   protected DataFile writeDataFile(Table table, List<GenericRecord> records) {
     try {
-      OutputFile file = Files.localOutput(temp.newFile());
+      OutputFile file = Files.localOutput(File.createTempFile("junit", null, temp.toFile()));
 
       DataWriter<GenericRecord> dataWriter =
           Parquet.writeData(file)

@@ -18,40 +18,61 @@
  */
 package org.apache.iceberg.spark.extensions;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import java.util.List;
-import java.util.Map;
 import org.apache.iceberg.HasTableOperations;
+import org.apache.iceberg.Parameter;
+import org.apache.iceberg.ParameterizedTestExtension;
+import org.apache.iceberg.Parameters;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.spark.Spark3Util;
+import org.apache.iceberg.spark.SparkCatalogConfig;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.parser.ParseException;
 import org.apache.spark.sql.functions;
 import org.apache.spark.sql.types.DataTypes;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 
+@ExtendWith(ParameterizedTestExtension.class)
 public class TestRegisterTableProcedure extends SparkExtensionsTestBase {
 
-  private final String targetName;
+  @Parameter(index = 3)
+  private String targetName;
 
-  public TestRegisterTableProcedure(
-      String catalogName, String implementation, Map<String, String> config) {
-    super(catalogName, implementation, config);
-    targetName = tableName("register_table");
+  @Parameters(name = "catalogName = {0}, implementation = {1}, config = {2}, targetName = {3}")
+  protected static Object[][] parameters() {
+    return new Object[][] {
+      {
+        SparkCatalogConfig.HIVE.catalogName(),
+        SparkCatalogConfig.HIVE.implementation(),
+        SparkCatalogConfig.HIVE.properties(),
+        SparkCatalogConfig.HIVE.catalogName() + ".default.register_table"
+      },
+      {
+        SparkCatalogConfig.HADOOP.catalogName(),
+        SparkCatalogConfig.HADOOP.implementation(),
+        SparkCatalogConfig.HADOOP.properties(),
+        SparkCatalogConfig.HADOOP.catalogName() + ".default.register_table"
+      },
+      {
+        SparkCatalogConfig.SPARK.catalogName(),
+        SparkCatalogConfig.SPARK.implementation(),
+        SparkCatalogConfig.SPARK.properties(),
+        "default.register_table"
+      }
+    };
   }
 
-  @Rule public TemporaryFolder temp = new TemporaryFolder();
-
-  @After
+  @AfterEach
   public void dropTables() {
     sql("DROP TABLE IF EXISTS %s", tableName);
     sql("DROP TABLE IF EXISTS %s", targetName);
   }
 
-  @Test
+  @TestTemplate
   public void testRegisterTable() throws NoSuchTableException, ParseException {
     long numRows = 1000;
 
@@ -70,16 +91,16 @@ public class TestRegisterTableProcedure extends SparkExtensionsTestBase {
 
     List<Object[]> result =
         sql("CALL %s.system.register_table('%s', '%s')", catalogName, targetName, metadataJson);
-    Assert.assertEquals("Current Snapshot is not correct", currentSnapshotId, result.get(0)[0]);
+    assertThat(result.get(0)[0]).as("Current Snapshot is not correct").isEqualTo(currentSnapshotId);
 
     List<Object[]> original = sql("SELECT * FROM %s", tableName);
     List<Object[]> registered = sql("SELECT * FROM %s", targetName);
     assertEquals("Registered table rows should match original table rows", original, registered);
-    Assert.assertEquals(
-        "Should have the right row count in the procedure result", numRows, result.get(0)[1]);
-    Assert.assertEquals(
-        "Should have the right datafile count in the procedure result",
-        originalFileCount,
-        result.get(0)[2]);
+    assertThat(result.get(0)[1])
+        .as("Should have the right row count in the procedure result")
+        .isEqualTo(numRows);
+    assertThat(result.get(0)[2])
+        .as("Should have the right datafile count in the procedure result")
+        .isEqualTo(originalFileCount);
   }
 }

@@ -21,7 +21,7 @@ package org.apache.iceberg.spark.extensions;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Map;
-import org.apache.iceberg.PlanningMode;
+import org.apache.iceberg.ParameterizedTestExtension;
 import org.apache.iceberg.RowLevelOperationMode;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
@@ -31,31 +31,11 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.util.SnapshotUtil;
 import org.apache.spark.sql.Encoders;
-import org.junit.Test;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 
+@ExtendWith(ParameterizedTestExtension.class)
 public class TestMergeOnReadMerge extends TestMerge {
-
-  public TestMergeOnReadMerge(
-      String catalogName,
-      String implementation,
-      Map<String, String> config,
-      String fileFormat,
-      boolean vectorized,
-      String distributionMode,
-      boolean fanoutEnabled,
-      String branch,
-      PlanningMode planningMode) {
-    super(
-        catalogName,
-        implementation,
-        config,
-        fileFormat,
-        vectorized,
-        distributionMode,
-        fanoutEnabled,
-        branch,
-        planningMode);
-  }
 
   @Override
   protected Map<String, String> extraTableProperties() {
@@ -66,12 +46,12 @@ public class TestMergeOnReadMerge extends TestMerge {
         RowLevelOperationMode.MERGE_ON_READ.modeName());
   }
 
-  @Test
+  @TestTemplate
   public void testMergeDeleteFileGranularity() {
     checkMergeDeleteGranularity(DeleteGranularity.FILE);
   }
 
-  @Test
+  @TestTemplate
   public void testMergeDeletePartitionGranularity() {
     checkMergeDeleteGranularity(DeleteGranularity.PARTITION);
   }

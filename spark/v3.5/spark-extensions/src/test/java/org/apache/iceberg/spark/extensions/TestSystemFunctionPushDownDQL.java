@@ -39,7 +39,8 @@ import static org.apache.iceberg.spark.SystemFunctionPushDownHelper.timestampStr
 import static org.apache.iceberg.spark.SystemFunctionPushDownHelper.timestampStrToYearOrdinal;
 
 import java.util.List;
-import java.util.Map;
+import org.apache.iceberg.ParameterizedTestExtension;
+import org.apache.iceberg.Parameters;
 import org.apache.iceberg.expressions.ExpressionUtil;
 import org.apache.iceberg.spark.SparkCatalogConfig;
 import org.apache.iceberg.spark.source.PlanUtils;
@@ -50,18 +51,15 @@ import org.apache.spark.sql.catalyst.expressions.Expression;
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke;
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan;
 import org.assertj.core.api.Assertions;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runners.Parameterized;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 
+@ExtendWith(ParameterizedTestExtension.class)
 public class TestSystemFunctionPushDownDQL extends SparkExtensionsTestBase {
-  public TestSystemFunctionPushDownDQL(
-      String catalogName, String implementation, Map<String, String> config) {
-    super(catalogName, implementation, config);
-  }
 
-  @Parameterized.Parameters(name = "catalogName = {0}, implementation = {1}, config = {2}")
+  @Parameters(name = "catalogName = {0}, implementation = {1}, config = {2}")
   public static Object[][] parameters() {
     return new Object[][] {
       {
@@ -72,23 +70,23 @@ public class TestSystemFunctionPushDownDQL extends SparkExtensionsTestBase {
     };
   }
 
-  @Before
+  @BeforeEach
   public void before() {
     sql("USE %s", catalogName);
   }
 
-  @After
+  @AfterEach
   public void removeTables() {
     sql("DROP TABLE IF EXISTS %s", tableName);
   }
 
-  @Test
+  @TestTemplate
   public void testYearsFunctionOnUnpartitionedTable() {
     createUnpartitionedTable(spark, tableName);
     testYearsFunction(false);
   }
 
-  @Test
+  @TestTemplate
   public void testYearsFunctionOnPartitionedTable() {
     createPartitionedTable(spark, tableName, "years(ts)");
     testYearsFunction(true);
@@ -110,13 +108,13 @@ public class TestSystemFunctionPushDownDQL extends SparkExtensionsTestBase {
     Assertions.assertThat(actual.size()).isEqualTo(5);
   }
 
-  @Test
+  @TestTemplate
   public void testMonthsFunctionOnUnpartitionedTable() {
     createUnpartitionedTable(spark, tableName);
     testMonthsFunction(false);
   }
 
-  @Test
+  @TestTemplate
   public void testMonthsFunctionOnPartitionedTable() {
     createPartitionedTable(spark, tableName, "months(ts)");
     testMonthsFunction(true);
@@ -138,13 +136,13 @@ public class TestSystemFunctionPushDownDQL extends SparkExtensionsTestBase {
     Assertions.assertThat(actual.size()).isEqualTo(5);
   }
 
-  @Test
+  @TestTemplate
   public void testDaysFunctionOnUnpartitionedTable() {
     createUnpartitionedTable(spark, tableName);
     testDaysFunction(false);
   }
 
-  @Test
+  @TestTemplate
   public void testDaysFunctionOnPartitionedTable() {
     createPartitionedTable(spark, tableName, "days(ts)");
     testDaysFunction(true);
@@ -168,13 +166,13 @@ public class TestSystemFunctionPushDownDQL extends SparkExtensionsTestBase {
     Assertions.assertThat(actual.size()).isEqualTo(5);
   }
 
-  @Test
+  @TestTemplate
   public void testHoursFunctionOnUnpartitionedTable() {
     createUnpartitionedTable(spark, tableName);
     testHoursFunction(false);
   }
 
-  @Test
+  @TestTemplate
   public void testHoursFunctionOnPartitionedTable() {
     createPartitionedTable(spark, tableName, "hours(ts)");
     testHoursFunction(true);
@@ -196,13 +194,13 @@ public class TestSystemFunctionPushDownDQL extends SparkExtensionsTestBase {
     Assertions.assertThat(actual.size()).isEqualTo(8);
   }
 
-  @Test
+  @TestTemplate
   public void testBucketLongFunctionOnUnpartitionedTable() {
     createUnpartitionedTable(spark, tableName);
     testBucketLongFunction(false);
   }
 
-  @Test
+  @TestTemplate
   public void testBucketLongFunctionOnPartitionedTable() {
     createPartitionedTable(spark, tableName, "bucket(5, id)");
     testBucketLongFunction(true);
@@ -224,13 +222,13 @@ public class TestSystemFunctionPushDownDQL extends SparkExtensionsTestBase {
     Assertions.assertThat(actual.size()).isEqualTo(5);
   }
 
-  @Test
+  @TestTemplate
   public void testBucketStringFunctionOnUnpartitionedTable() {
     createUnpartitionedTable(spark, tableName);
     testBucketStringFunction(false);
   }
 
-  @Test
+  @TestTemplate
   public void testBucketStringFunctionOnPartitionedTable() {
     createPartitionedTable(spark, tableName, "bucket(5, data)");
     testBucketStringFunction(true);
@@ -252,13 +250,13 @@ public class TestSystemFunctionPushDownDQL extends SparkExtensionsTestBase {
     Assertions.assertThat(actual.size()).isEqualTo(8);
   }
 
-  @Test
+  @TestTemplate
   public void testTruncateFunctionOnUnpartitionedTable() {
     createUnpartitionedTable(spark, tableName);
     testTruncateFunction(false);
   }
 
-  @Test
+  @TestTemplate
   public void testTruncateFunctionOnPartitionedTable() {
     createPartitionedTable(spark, tableName, "truncate(4, data)");
     testTruncateFunction(true);

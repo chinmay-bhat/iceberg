@@ -19,11 +19,11 @@
 package org.apache.iceberg.spark.extensions;
 
 import static org.apache.iceberg.types.Types.NestedField.optional;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.avro.generic.GenericData.Record;
@@ -31,6 +31,7 @@ import org.apache.commons.collections.ListUtils;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.HasTableOperations;
 import org.apache.iceberg.ManifestFile;
+import org.apache.iceberg.ParameterizedTestExtension;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
@@ -51,22 +52,19 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.StructType;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 
+@ExtendWith(ParameterizedTestExtension.class)
 public class TestMetadataTables extends SparkExtensionsTestBase {
 
-  public TestMetadataTables(String catalogName, String implementation, Map<String, String> config) {
-    super(catalogName, implementation, config);
-  }
-
-  @After
+  @AfterEach
   public void removeTables() {
     sql("DROP TABLE IF EXISTS %s", tableName);
   }
 
-  @Test
+  @TestTemplate
   public void testUnpartitionedTable() throws Exception {
     sql(
         "CREATE TABLE %s (id bigint, data string) USING iceberg TBLPROPERTIES"
@@ -90,8 +88,8 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
     Table table = Spark3Util.loadIcebergTable(spark, tableName);
     List<ManifestFile> expectedDataManifests = TestHelpers.dataManifests(table);
     List<ManifestFile> expectedDeleteManifests = TestHelpers.deleteManifests(table);
-    Assert.assertEquals("Should have 1 data manifest", 1, expectedDataManifests.size());
-    Assert.assertEquals("Should have 1 delete manifest", 1, expectedDeleteManifests.size());
+    assertThat(expectedDataManifests).as("Should have 1 data manifest").hasSize(1);
+    assertThat(expectedDeleteManifests).as("Should have 1 delete manifest").hasSize(1);
 
     Schema entriesTableSchema = Spark3Util.loadIcebergTable(spark, tableName + ".entries").schema();
     Schema filesTableSchema = Spark3Util.loadIcebergTable(spark, tableName + ".files").schema();
@@ -99,13 +97,12 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
     // check delete files table
     Dataset<Row> actualDeleteFilesDs = spark.sql("SELECT * FROM " + tableName + ".delete_files");
     List<Row> actualDeleteFiles = TestHelpers.selectNonDerived(actualDeleteFilesDs).collectAsList();
-    Assert.assertEquals(
-        "Metadata table should return one delete file", 1, actualDeleteFiles.size());
+    assertThat(actualDeleteFiles).as("Metadata table should return one delete file").hasSize(1);
 
     List<Record> expectedDeleteFiles =
         expectedEntries(
             table, FileContent.POSITION_DELETES, entriesTableSchema, expectedDeleteManifests, null);
-    Assert.assertEquals("Should be one delete file manifest entry", 1, expectedDeleteFiles.size());
+    assertThat(expectedDeleteFiles).as("Should be one delete file manifest entry").hasSize(1);
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualDeleteFilesDs),
         expectedDeleteFiles.get(0),
@@ -114,11 +111,11 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
     // check data files table
     Dataset<Row> actualDataFilesDs = spark.sql("SELECT * FROM " + tableName + ".data_files");
     List<Row> actualDataFiles = TestHelpers.selectNonDerived(actualDataFilesDs).collectAsList();
-    Assert.assertEquals("Metadata table should return one data file", 1, actualDataFiles.size());
+    assertThat(actualDataFiles).as("Metadata table should return one data file").hasSize(1);
 
     List<Record> expectedDataFiles =
         expectedEntries(table, FileContent.DATA, entriesTableSchema, expectedDataManifests, null);
-    Assert.assertEquals("Should be one data file manifest entry", 1, expectedDataFiles.size());
+    assertThat(expectedDataFiles).as("Should be one data file manifest entry").hasSize(1);
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualDataFilesDs),
         expectedDataFiles.get(0),
@@ -129,19 +126,19 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
         spark.sql("SELECT * FROM " + tableName + ".files ORDER BY content");
     List<Row> actualFiles = TestHelpers.selectNonDerived(actualFilesDs).collectAsList();
 
-    Assert.assertEquals("Metadata table should return two files", 2, actualFiles.size());
+    assertThat(actualFiles).as("Metadata table should return 2 files").hasSize(2);
 
     List<Record> expectedFiles =
         Stream.concat(expectedDataFiles.stream(), expectedDeleteFiles.stream())
             .collect(Collectors.toList());
-    Assert.assertEquals("Should have two files manifest entries", 2, expectedFiles.size());
+    assertThat(expectedFiles).as("Should have 2 files manifest entries").hasSize(2);
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualFilesDs), expectedFiles.get(0), actualFiles.get(0));
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualFilesDs), expectedFiles.get(1), actualFiles.get(1));
   }
 
-  @Test
+  @TestTemplate
   public void testPartitionedTable() throws Exception {
     sql(
         "CREATE TABLE %s (id bigint, data string) "
@@ -175,8 +172,8 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
 
     List<ManifestFile> expectedDataManifests = TestHelpers.dataManifests(table);
     List<ManifestFile> expectedDeleteManifests = TestHelpers.deleteManifests(table);
-    Assert.assertEquals("Should have 2 data manifests", 2, expectedDataManifests.size());
-    Assert.assertEquals("Should have 2 delete manifests", 2, expectedDeleteManifests.size());
+    assertThat(expectedDataManifests).as("Should have 2 data manifests").hasSize(2);
+    assertThat(expectedDeleteManifests).as("Should have 2 delete manifests").hasSize(2);
 
     Schema filesTableSchema =
         Spark3Util.loadIcebergTable(spark, tableName + ".delete_files").schema();
@@ -185,15 +182,13 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
     List<Record> expectedDeleteFiles =
         expectedEntries(
             table, FileContent.POSITION_DELETES, entriesTableSchema, expectedDeleteManifests, "a");
-    Assert.assertEquals(
-        "Should have one delete file manifest entry", 1, expectedDeleteFiles.size());
+    assertThat(expectedDeleteFiles).as("Should have one delete file manifest entry").hasSize(1);
 
     Dataset<Row> actualDeleteFilesDs =
         spark.sql("SELECT * FROM " + tableName + ".delete_files " + "WHERE partition.data='a'");
     List<Row> actualDeleteFiles = actualDeleteFilesDs.collectAsList();
 
-    Assert.assertEquals(
-        "Metadata table should return one delete file", 1, actualDeleteFiles.size());
+    assertThat(actualDeleteFiles).as("Metadata table should return one delete file").hasSize(1);
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualDeleteFilesDs),
         expectedDeleteFiles.get(0),
@@ -202,13 +197,13 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
     // Check data files table
     List<Record> expectedDataFiles =
         expectedEntries(table, FileContent.DATA, entriesTableSchema, expectedDataManifests, "a");
-    Assert.assertEquals("Should have one data file manifest entry", 1, expectedDataFiles.size());
+    assertThat(expectedDeleteFiles).as("Should have one delete file manifest entry").hasSize(1);
 
     Dataset<Row> actualDataFilesDs =
         spark.sql("SELECT * FROM " + tableName + ".data_files " + "WHERE partition.data='a'");
 
     List<Row> actualDataFiles = TestHelpers.selectNonDerived(actualDataFilesDs).collectAsList();
-    Assert.assertEquals("Metadata table should return one data file", 1, actualDataFiles.size());
+    assertThat(actualDataFiles).as("Metadata table should return one data file").hasSize(1);
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualDataFilesDs),
         expectedDataFiles.get(0),
@@ -216,32 +211,31 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
 
     List<Row> actualPartitionsWithProjection =
         spark.sql("SELECT file_count FROM " + tableName + ".partitions ").collectAsList();
-    Assert.assertEquals(
-        "Metadata table should return two partitions record",
-        2,
-        actualPartitionsWithProjection.size());
+    assertThat(actualPartitionsWithProjection)
+        .as("Metadata table should return two partitions record")
+        .hasSize(2);
     for (int i = 0; i < 2; ++i) {
-      Assert.assertEquals(1, actualPartitionsWithProjection.get(i).get(0));
+      assertThat(actualPartitionsWithProjection.get(i).get(0)).isEqualTo(1);
     }
 
     // Check files table
     List<Record> expectedFiles =
         Stream.concat(expectedDataFiles.stream(), expectedDeleteFiles.stream())
             .collect(Collectors.toList());
-    Assert.assertEquals("Should have two file manifest entries", 2, expectedFiles.size());
+    assertThat(expectedFiles).as("Should have two file manifest entries").hasSize(2);
 
     Dataset<Row> actualFilesDs =
         spark.sql(
             "SELECT * FROM " + tableName + ".files " + "WHERE partition.data='a' ORDER BY content");
     List<Row> actualFiles = TestHelpers.selectNonDerived(actualFilesDs).collectAsList();
-    Assert.assertEquals("Metadata table should return two files", 2, actualFiles.size());
+    assertThat(actualFiles).as("Metadata table should return 2 files").hasSize(2);
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualFilesDs), expectedFiles.get(0), actualFiles.get(0));
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualFilesDs), expectedFiles.get(1), actualFiles.get(1));
   }
 
-  @Test
+  @TestTemplate
   public void testAllFilesUnpartitioned() throws Exception {
     sql(
         "CREATE TABLE %s (id bigint, data string) USING iceberg TBLPROPERTIES"
@@ -265,13 +259,13 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
 
     Table table = Spark3Util.loadIcebergTable(spark, tableName);
     List<ManifestFile> expectedDataManifests = TestHelpers.dataManifests(table);
-    Assert.assertEquals("Should have 1 data manifest", 1, expectedDataManifests.size());
+    assertThat(expectedDataManifests).as("Should have 1 data manifest").hasSize(1);
     List<ManifestFile> expectedDeleteManifests = TestHelpers.deleteManifests(table);
-    Assert.assertEquals("Should have 1 delete manifest", 1, expectedDeleteManifests.size());
+    assertThat(expectedDeleteManifests).as("Should have 1 delete manifest").hasSize(1);
 
     // Clear table to test whether 'all_files' can read past files
     List<Object[]> results = sql("DELETE FROM %s", tableName);
-    Assert.assertEquals("Table should be cleared", 0, results.size());
+    assertThat(results).as("Table should be cleared").hasSize(0);
 
     Schema entriesTableSchema = Spark3Util.loadIcebergTable(spark, tableName + ".entries").schema();
     Schema filesTableSchema =
@@ -283,8 +277,8 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
 
     List<Record> expectedDataFiles =
         expectedEntries(table, FileContent.DATA, entriesTableSchema, expectedDataManifests, null);
-    Assert.assertEquals("Should be one data file manifest entry", 1, expectedDataFiles.size());
-    Assert.assertEquals("Metadata table should return one data file", 1, actualDataFiles.size());
+    assertThat(expectedDataFiles).as("Should be one data file manifest entry").hasSize(1);
+    assertThat(actualDataFiles).as("Metadata table should return one data file").hasSize(1);
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualDataFilesDs),
         expectedDataFiles.get(0),
@@ -297,9 +291,8 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
     List<Record> expectedDeleteFiles =
         expectedEntries(
             table, FileContent.POSITION_DELETES, entriesTableSchema, expectedDeleteManifests, null);
-    Assert.assertEquals("Should be one delete file manifest entry", 1, expectedDeleteFiles.size());
-    Assert.assertEquals(
-        "Metadata table should return one delete file", 1, actualDeleteFiles.size());
+    assertThat(expectedDeleteFiles).as("Should be one delete file manifest entry").hasSize(1);
+    assertThat(actualDeleteFiles).as("Metadata table should return one delete file").hasSize(1);
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualDeleteFilesDs),
         expectedDeleteFiles.get(0),
@@ -311,12 +304,12 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
     List<Row> actualFiles = actualFilesDs.collectAsList();
     List<Record> expectedFiles = ListUtils.union(expectedDataFiles, expectedDeleteFiles);
     expectedFiles.sort(Comparator.comparing(r -> ((Integer) r.get("content"))));
-    Assert.assertEquals("Metadata table should return two files", 2, actualFiles.size());
+    assertThat(actualFiles).as("Metadata table should return 2 files").hasSize(2);
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualFilesDs), expectedFiles, actualFiles);
   }
 
-  @Test
+  @TestTemplate
   public void testAllFilesPartitioned() throws Exception {
     // Create table and insert data
     sql(
@@ -348,13 +341,13 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
 
     Table table = Spark3Util.loadIcebergTable(spark, tableName);
     List<ManifestFile> expectedDataManifests = TestHelpers.dataManifests(table);
-    Assert.assertEquals("Should have 2 data manifests", 2, expectedDataManifests.size());
+    assertThat(expectedDataManifests).as("Should have 2 data manifests").hasSize(2);
     List<ManifestFile> expectedDeleteManifests = TestHelpers.deleteManifests(table);
-    Assert.assertEquals("Should have 1 delete manifest", 1, expectedDeleteManifests.size());
+    assertThat(expectedDeleteManifests).as("Should have 1 delete manifest").hasSize(1);
 
     // Clear table to test whether 'all_files' can read past files
     List<Object[]> results = sql("DELETE FROM %s", tableName);
-    Assert.assertEquals("Table should be cleared", 0, results.size());
+    assertThat(results).as("Table should be cleared").hasSize(0);
 
     Schema entriesTableSchema = Spark3Util.loadIcebergTable(spark, tableName + ".entries").schema();
     Schema filesTableSchema =
@@ -366,8 +359,8 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
     List<Row> actualDataFiles = TestHelpers.selectNonDerived(actualDataFilesDs).collectAsList();
     List<Record> expectedDataFiles =
         expectedEntries(table, FileContent.DATA, entriesTableSchema, expectedDataManifests, "a");
-    Assert.assertEquals("Should be one data file manifest entry", 1, expectedDataFiles.size());
-    Assert.assertEquals("Metadata table should return one data file", 1, actualDataFiles.size());
+    assertThat(expectedDataFiles).as("Should be one data file manifest entry").hasSize(1);
+    assertThat(actualDataFiles).as("Metadata table should return one data file").hasSize(1);
     TestHelpers.assertEqualsSafe(
         SparkSchemaUtil.convert(TestHelpers.selectNonDerived(actualDataFilesDs).schema())
             .asStruct(),
@@ -382,8 +375,8 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
     List<Record> expectedDeleteFiles =
         expectedEntries(
             table, FileContent.POSITION_DELETES, entriesTableSchema, expectedDeleteManifests, "a");
-    Assert.assertEquals("Should be one data file manifest entry", 1, expectedDeleteFiles.size());
-    Assert.assertEquals("Metadata table should return one data file", 1, actualDeleteFiles.size());
+    assertThat(expectedDeleteFiles).as("Should be one data file manifest entry").hasSize(1);
+    assertThat(actualDeleteFiles).as("Metadata table should return one data file").hasSize(1);
 
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualDeleteFilesDs),
@@ -401,12 +394,12 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
 
     List<Record> expectedFiles = ListUtils.union(expectedDataFiles, expectedDeleteFiles);
     expectedFiles.sort(Comparator.comparing(r -> ((Integer) r.get("content"))));
-    Assert.assertEquals("Metadata table should return two files", 2, actualFiles.size());
+    assertThat(actualFiles).as("Metadata table should return 2 files").hasSize(2);
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualDataFilesDs), expectedFiles, actualFiles);
   }
 
-  @Test
+  @TestTemplate
   public void testMetadataLogEntries() throws Exception {
     // Create table and insert data
     sql(
@@ -463,8 +456,9 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
         sql(
             "SELECT * FROM %s.metadata_log_entries WHERE latest_snapshot_id = %s",
             tableName, currentSnapshotId);
-    Assert.assertEquals(
-        "metadataLogEntries table should return 1 row", 1, metadataLogWithFilters.size());
+    assertThat(metadataLogWithFilters)
+        .as("metadataLogEntries table should return 1 row")
+        .hasSize(1);
     assertEquals(
         "Result should match the latest snapshot entry",
         ImmutableList.of(
@@ -485,15 +479,16 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
     metadataFiles.add(tableMetadata.metadataFileLocation());
     List<Object[]> metadataLogWithProjection =
         sql("SELECT file FROM %s.metadata_log_entries", tableName);
-    Assert.assertEquals(
-        "metadataLogEntries table should return 3 rows", 3, metadataLogWithProjection.size());
+    assertThat(metadataLogWithProjection)
+        .as("metadataLogEntries table should return 3 row")
+        .hasSize(3);
     assertEquals(
         "metadataLog entry should be of same file",
         metadataFiles.stream().map(this::row).collect(Collectors.toList()),
         metadataLogWithProjection);
   }
 
-  @Test
+  @TestTemplate
   public void testFilesTableTimeTravelWithSchemaEvolution() throws Exception {
     // Create table and insert data
     sql(
@@ -543,7 +538,7 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
     List<Record> expectedFiles =
         expectedEntries(table, FileContent.DATA, entriesTableSchema, expectedDataManifests, null);
 
-    Assert.assertEquals("actualFiles size should be 2", 2, actualFiles.size());
+    assertThat(actualFiles).as("actualFiles size should be 2").hasSize(2);
 
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualFilesDs), expectedFiles.get(0), actualFiles.get(0));
@@ -551,13 +546,12 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
     TestHelpers.assertEqualsSafe(
         TestHelpers.nonDerivedSchema(actualFilesDs), expectedFiles.get(1), actualFiles.get(1));
 
-    Assert.assertEquals(
-        "expectedFiles and actualFiles size should be the same",
-        actualFiles.size(),
-        expectedFiles.size());
+    assertThat(actualFiles)
+        .as("expectedFiles and actualFiles size should be the same")
+        .hasSameSizeAs(expectedFiles);
   }
 
-  @Test
+  @TestTemplate
   public void testSnapshotReferencesMetatable() throws Exception {
     // Create table and insert data
     sql(
@@ -603,43 +597,44 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
         .commit();
     // Check refs table
     List<Row> references = spark.sql("SELECT * FROM " + tableName + ".refs").collectAsList();
-    Assert.assertEquals("Refs table should return 3 rows", 3, references.size());
+    assertThat(references).as("Refs table should return 3 rows").hasSize(3);
     List<Row> branches =
         spark.sql("SELECT * FROM " + tableName + ".refs WHERE type='BRANCH'").collectAsList();
-    Assert.assertEquals("Refs table should return 2 branches", 2, branches.size());
+    assertThat(references).as("Refs table should return 2 branches").hasSize(2);
     List<Row> tags =
         spark.sql("SELECT * FROM " + tableName + ".refs WHERE type='TAG'").collectAsList();
-    Assert.assertEquals("Refs table should return 1 tag", 1, tags.size());
+    assertThat(tags).as("Refs table should return 1 tag").hasSize(1);
 
     // Check branch entries in refs table
     List<Row> mainBranch =
         spark
             .sql("SELECT * FROM " + tableName + ".refs WHERE name = 'main' AND type='BRANCH'")
             .collectAsList();
-    Assert.assertEquals("main", mainBranch.get(0).getAs("name"));
-    Assert.assertEquals("BRANCH", mainBranch.get(0).getAs("type"));
-    Assert.assertEquals(currentSnapshotId, mainBranch.get(0).getAs("snapshot_id"));
+
+    assertThat(mainBranch.get(0).getAs("name").equals("main")).isTrue();
+    assertThat(mainBranch.get(0).getAs("type").equals("BRANCH")).isTrue();
+    assertThat(mainBranch.get(0).getAs("snapshot_id").equals(currentSnapshotId)).isTrue();
 
     List<Row> testBranch =
         spark
             .sql("SELECT * FROM " + tableName + ".refs WHERE name = 'testBranch' AND type='BRANCH'")
             .collectAsList();
-    Assert.assertEquals("testBranch", testBranch.get(0).getAs("name"));
-    Assert.assertEquals("BRANCH", testBranch.get(0).getAs("type"));
-    Assert.assertEquals(currentSnapshotId, testBranch.get(0).getAs("snapshot_id"));
-    Assert.assertEquals(Long.valueOf(10), testBranch.get(0).getAs("max_reference_age_in_ms"));
-    Assert.assertEquals(Integer.valueOf(20), testBranch.get(0).getAs("min_snapshots_to_keep"));
-    Assert.assertEquals(Long.valueOf(30), testBranch.get(0).getAs("max_snapshot_age_in_ms"));
+    assertThat(testBranch.get(0).getAs("name").equals("testBranch")).isTrue();
+    assertThat(testBranch.get(0).getAs("type").equals("BRANCH")).isTrue();
+    assertThat(testBranch.get(0).getAs("snapshot_id").equals(currentSnapshotId)).isTrue();
+    assertThat(testBranch.get(0).getAs("max_reference_age_in_ms").equals(10L)).isTrue();
+    assertThat(testBranch.get(0).getAs("min_snapshots_to_keep").equals(20L)).isTrue();
+    assertThat(testBranch.get(0).getAs("max_snapshot_age_in_ms").equals(30L)).isTrue();
 
     // Check tag entries in refs table
     List<Row> testTag =
         spark
             .sql("SELECT * FROM " + tableName + ".refs WHERE name = 'testTag' AND type='TAG'")
             .collectAsList();
-    Assert.assertEquals("testTag", testTag.get(0).getAs("name"));
-    Assert.assertEquals("TAG", testTag.get(0).getAs("type"));
-    Assert.assertEquals(currentSnapshotId, testTag.get(0).getAs("snapshot_id"));
-    Assert.assertEquals(Long.valueOf(50), testTag.get(0).getAs("max_reference_age_in_ms"));
+    assertThat(testTag.get(0).getAs("name").equals("testTag")).isTrue();
+    assertThat(testTag.get(0).getAs("type").equals("TAG")).isTrue();
+    assertThat(testTag.get(0).getAs("snapshot_id").equals(currentSnapshotId)).isTrue();
+    assertThat(testTag.get(0).getAs("max_reference_age_in_ms").equals(50L)).isTrue();
 
     // Check projection in refs table
     List<Row> testTagProjection =
@@ -649,12 +644,11 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
                     + tableName
                     + ".refs where type='TAG'")
             .collectAsList();
-    Assert.assertEquals("testTag", testTagProjection.get(0).getAs("name"));
-    Assert.assertEquals("TAG", testTagProjection.get(0).getAs("type"));
-    Assert.assertEquals(currentSnapshotId, testTagProjection.get(0).getAs("snapshot_id"));
-    Assert.assertEquals(
-        Long.valueOf(50), testTagProjection.get(0).getAs("max_reference_age_in_ms"));
-    Assert.assertNull(testTagProjection.get(0).getAs("min_snapshots_to_keep"));
+    assertThat(testTagProjection.get(0).getAs("name").equals("testTag")).isTrue();
+    assertThat(testTagProjection.get(0).getAs("type").equals("TAG")).isTrue();
+    assertThat(testTagProjection.get(0).getAs("snapshot_id").equals(currentSnapshotId)).isTrue();
+    assertThat(testTagProjection.get(0).getAs("max_reference_age_in_ms").equals(50L)).isTrue();
+    assertThat(testTagProjection.get(0).getAs("max_reference_age_in_ms") == null).isTrue();
 
     List<Row> mainBranchProjection =
         spark
@@ -663,8 +657,8 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
                     + tableName
                     + ".refs WHERE name = 'main' AND type = 'BRANCH'")
             .collectAsList();
-    Assert.assertEquals("main", mainBranchProjection.get(0).getAs("name"));
-    Assert.assertEquals("BRANCH", mainBranchProjection.get(0).getAs("type"));
+    assertThat(mainBranchProjection.get(0).getAs("name").equals("main")).isTrue();
+    assertThat(mainBranchProjection.get(0).getAs("type").equals("BRANCH")).isTrue();
 
     List<Row> testBranchProjection =
         spark
@@ -673,11 +667,10 @@ public class TestMetadataTables extends SparkExtensionsTestBase {
                     + tableName
                     + ".refs WHERE name = 'testBranch' AND type = 'BRANCH'")
             .collectAsList();
-    Assert.assertEquals("testBranch", testBranchProjection.get(0).getAs("name"));
-    Assert.assertEquals("BRANCH", testBranchProjection.get(0).getAs("type"));
-    Assert.assertEquals(currentSnapshotId, testBranchProjection.get(0).getAs("snapshot_id"));
-    Assert.assertEquals(
-        Long.valueOf(10), testBranchProjection.get(0).getAs("max_reference_age_in_ms"));
+    assertThat(testBranchProjection.get(0).getAs("name").equals("testBranch")).isTrue();
+    assertThat(testBranchProjection.get(0).getAs("type").equals("BRANCH")).isTrue();
+    assertThat(testBranchProjection.get(0).getAs("snapshot_id").equals(currentSnapshotId)).isTrue();
+    assertThat(testBranchProjection.get(0).getAs("max_reference_age_in_ms").equals(10L)).isTrue();
   }
 
   /**

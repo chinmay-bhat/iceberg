@@ -22,11 +22,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.apache.iceberg.IcebergBuild;
+import org.apache.iceberg.Parameter;
+import org.apache.iceberg.ParameterizedTestExtension;
+import org.apache.iceberg.Parameters;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
@@ -42,16 +44,19 @@ import org.apache.spark.sql.AnalysisException;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runners.Parameterized;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 
+@ExtendWith(ParameterizedTestExtension.class)
 public class TestViews extends SparkExtensionsTestBase {
-  private static final Namespace NAMESPACE = Namespace.of("default");
-  private final String tableName = "table";
+  @Parameter(index=3)
+  private static Namespace NAMESPACE;
+  @Parameter(index=4)
+  private String tableName;
 
-  @Before
+  @BeforeEach
   public void before() {
     spark.conf().set("spark.sql.defaultCatalog", catalogName);
     sql("USE %s", catalogName);
@@ -59,28 +64,28 @@ public class TestViews extends SparkExtensionsTestBase {
     sql("CREATE TABLE %s (id INT, data STRING)", tableName);
   }
 
-  @After
+  @AfterEach
   public void removeTable() {
     sql("USE %s", catalogName);
     sql("DROP TABLE IF EXISTS %s", tableName);
   }
 
-  @Parameterized.Parameters(name = "catalogName = {0}, implementation = {1}, config = {2}")
+  @Parameters(
+      name =
+          "catalogName = {0}, implementation = {1}, config = {2}, NAMESPACE = {3}, tableName = {4}")
   public static Object[][] parameters() {
     return new Object[][] {
       {
         SparkCatalogConfig.SPARK_WITH_VIEWS.catalogName(),
         SparkCatalogConfig.SPARK_WITH_VIEWS.implementation(),
-        SparkCatalogConfig.SPARK_WITH_VIEWS.properties()
+        SparkCatalogConfig.SPARK_WITH_VIEWS.properties(),
+        Namespace.of("default"),
+        "table"
       }
     };
   }
 
-  public TestViews(String catalog, String implementation, Map<String, String> properties) {
-    super(catalog, implementation, properties);
-  }
-
-  @Test
+  @TestTemplate
   public void readFromView() throws NoSuchTableException {
     insertRows(10);
     String viewName = "simpleView";
@@ -106,7 +111,7 @@ public class TestViews extends SparkExtensionsTestBase {
         .containsExactlyInAnyOrderElementsOf(expected);
   }
 
-  @Test
+  @TestTemplate
   public void readFromTrinoView() throws NoSuchTableException {
     insertRows(10);
     String viewName = "trinoView";
@@ -131,7 +136,7 @@ public class TestViews extends SparkExtensionsTestBase {
         .containsExactlyInAnyOrderElementsOf(expected);
   }
 
-  @Test
+  @TestTemplate
   public void readFromMultipleViews() throws NoSuchTableException {
     insertRows(6);
     String viewName = "firstView";
@@ -164,7 +169,7 @@ public class TestViews extends SparkExtensionsTestBase {
         .containsExactlyInAnyOrder(row(4), row(5), row(6));
   }
 
-  @Test
+  @TestTemplate
   public void readFromViewUsingNonExistingTable() throws NoSuchTableException {
     insertRows(10);
     String viewName = "viewWithNonExistingTable";
@@ -188,7 +193,7 @@ public class TestViews extends SparkExtensionsTestBase {
                 catalogName, NAMESPACE));
   }
 
-  @Test
+  @TestTemplate
   public void readFromViewUsingNonExistingTableColumn() throws NoSuchTableException {
     insertRows(10);
     String viewName = "viewWithNonExistingColumn";
@@ -210,7 +215,7 @@ public class TestViews extends SparkExtensionsTestBase {
             "A column or function parameter with name `non_existing` cannot be resolved");
   }
 
-  @Test
+  @TestTemplate
   public void readFromViewUsingInvalidSQL() throws NoSuchTableException {
     insertRows(10);
     String viewName = "viewWithInvalidSQL";
@@ -232,7 +237,7 @@ public class TestViews extends SparkExtensionsTestBase {
             String.format("The view `%s` cannot be displayed due to invalid view text", viewName));
   }
 
-  @Test
+  @TestTemplate
   public void readFromViewWithStaleSchema() throws NoSuchTableException {
     insertRows(10);
     String viewName = "staleView";
@@ -258,7 +263,7 @@ public class TestViews extends SparkExtensionsTestBase {
         .hasMessageContaining("A column or function parameter with name `data` cannot be resolved");
   }
 
-  @Test
+  @TestTemplate
   public void readFromViewHiddenByTempView() throws NoSuchTableException {
     insertRows(10);
     String viewName = "viewHiddenByTempView";
@@ -285,7 +290,7 @@ public class TestViews extends SparkExtensionsTestBase {
         .containsExactlyInAnyOrderElementsOf(expected);
   }
 
-  @Test
+  @TestTemplate
   public void readFromViewWithGlobalTempView() throws NoSuchTableException {
     insertRows(10);
     String viewName = "viewWithGlobalTempView";
@@ -315,7 +320,7 @@ public class TestViews extends SparkExtensionsTestBase {
             IntStream.rangeClosed(6, 10).mapToObj(this::row).collect(Collectors.toList()));
   }
 
-  @Test
+  @TestTemplate
   public void readFromViewReferencingAnotherView() throws NoSuchTableException {
     insertRows(10);
     String firstView = "viewBeingReferencedInAnotherView";
@@ -346,7 +351,7 @@ public class TestViews extends SparkExtensionsTestBase {
         .containsExactly(row(5));
   }
 
-  @Test
+  @TestTemplate
   public void readFromViewReferencingTempView() throws NoSuchTableException {
     insertRows(10);
     String tempView = "tempViewBeingReferencedInAnotherView";
@@ -382,7 +387,7 @@ public class TestViews extends SparkExtensionsTestBase {
         .hasMessageContaining("cannot be found");
   }
 
-  @Test
+  @TestTemplate
   public void readFromViewReferencingAnotherViewHiddenByTempView() throws NoSuchTableException {
     insertRows(10);
     String innerViewName = "inner_view";
@@ -430,7 +435,7 @@ public class TestViews extends SparkExtensionsTestBase {
         .containsExactlyInAnyOrderElementsOf(expectedViewRows);
   }
 
-  @Test
+  @TestTemplate
   public void readFromViewReferencingGlobalTempView() throws NoSuchTableException {
     insertRows(10);
     String globalTempView = "globalTempViewBeingReferenced";
@@ -468,7 +473,7 @@ public class TestViews extends SparkExtensionsTestBase {
         .hasMessageContaining("cannot be found");
   }
 
-  @Test
+  @TestTemplate
   public void readFromViewWithCTE() throws NoSuchTableException {
     insertRows(10);
     String viewName = "viewWithCTE";
@@ -491,7 +496,7 @@ public class TestViews extends SparkExtensionsTestBase {
     assertThat(sql("SELECT * FROM %s", viewName)).hasSize(1).containsExactly(row(10, 1L));
   }
 
-  @Test
+  @TestTemplate
   public void rewriteFunctionIdentifier() {
     String viewName = "rewriteFunctionIdentifier";
     String sql = "SELECT iceberg_version() AS version";
@@ -517,7 +522,7 @@ public class TestViews extends SparkExtensionsTestBase {
         .containsExactly(row(IcebergBuild.version()));
   }
 
-  @Test
+  @TestTemplate
   public void builtinFunctionIdentifierNotRewritten() {
     String viewName = "builtinFunctionIdentifierNotRewritten";
     String sql = "SELECT trim('  abc   ') AS result";
@@ -536,7 +541,7 @@ public class TestViews extends SparkExtensionsTestBase {
     assertThat(sql("SELECT * FROM %s", viewName)).hasSize(1).containsExactly(row("abc"));
   }
 
-  @Test
+  @TestTemplate
   public void rewriteFunctionIdentifierWithNamespace() {
     String viewName = "rewriteFunctionIdentifierWithNamespace";
     String sql = "SELECT system.bucket(100, 'a') AS bucket_result, 'a' AS value";
@@ -563,7 +568,7 @@ public class TestViews extends SparkExtensionsTestBase {
         .containsExactly(row(50, "a"));
   }
 
-  @Test
+  @TestTemplate
   public void fullFunctionIdentifier() {
     String viewName = "fullFunctionIdentifier";
     String sql =
@@ -587,7 +592,7 @@ public class TestViews extends SparkExtensionsTestBase {
         .containsExactly(row(50, "a"));
   }
 
-  @Test
+  @TestTemplate
   public void fullFunctionIdentifierNotRewrittenLoadFailure() {
     String viewName = "fullFunctionIdentifierNotRewrittenLoadFailure";
     String sql =
